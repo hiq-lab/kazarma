@@ -95,6 +95,9 @@ defmodule Kazarma.Matrix.Transaction do
         %Room{data: %{"type" => "matrix_user"}} = room ->
           Kazarma.RoomType.MatrixUser.create_from_event(event, room)
 
+        %Room{data: %{"type" => "group"}} = room ->
+          Kazarma.RoomType.Group.create_from_event(event, room)
+
         nil ->
           :ok
       end
