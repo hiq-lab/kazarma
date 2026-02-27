@@ -40,6 +40,12 @@ defmodule Kazarma.Commands do
     end
   end
 
+  def handle_command(["group", handle], room_id, user_id) do
+    Logger.debug("registering room #{room_id} as AP Group with handle: #{handle}")
+
+    Kazarma.RoomType.Group.register_room(room_id, handle, user_id)
+  end
+
   def handle_command(["unfollow"], room_id, user_id) do
     with %Room{data: %{"type" => "ap_user", "matrix_id" => receiver_id}} <-
            Bridge.get_room_by_local_id(room_id),
