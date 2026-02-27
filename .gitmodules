@@ -1,6 +1,6 @@
 [submodule "activity_pub"]
 	path = activity_pub
-	url = ../../kazarma/ActivityPub.git
+	url = https://github.com/hiq-lab/activity_pub.git
 [submodule "matrix_app_service"]
 	path = matrix_app_service
 	url = ../../kazarma/matrix_app_service.ex.git
