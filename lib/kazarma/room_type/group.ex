@@ -75,28 +75,42 @@ defmodule Kazarma.RoomType.Group do
         {:ok, keys} = ActivityPub.Safety.Keys.generate_rsa_pem()
         ap_data = Kazarma.ActivityPub.Actor.build_group_actor_data(handle, ap_id)
 
-        case Bridge.create_room(%{
-               local_id: room_id,
-               remote_id: ap_id,
-               data: %{
-                 type: :group,
-                 handle: handle,
-                 ap_data: ap_data,
-                 keys: keys
-               }
-             }) do
-          {:ok, room} ->
-            Logger.info(
-              "Registered Matrix room #{room_id} as AP Group @_grp_#{handle}@#{Kazarma.Address.ap_domain()}"
-            )
+        with {:ok, room} <-
+               Bridge.create_room(%{
+                 local_id: room_id,
+                 remote_id: ap_id,
+                 data: %{
+                   type: :group,
+                   handle: handle,
+                   ap_data: ap_data,
+                   keys: keys
+                 }
+               }),
+             {:ok, _user} <-
+               Bridge.create_user(%{
+                 local_id: room_id,
+                 remote_id: ap_id,
+                 data: %{"ap_data" => ap_data, "keys" => keys}
+               }) do
+          Logger.info(
+            "Registered Matrix room #{room_id} as AP Group @_grp_#{handle}@#{Kazarma.Address.ap_domain()}"
+          )
 
-            {:ok, room}
+          {:ok, room}
 
           error ->
             Logger.error("Failed to register group room: #{inspect(error)}")
             error
         end
     end
+  end
+
+  @doc """
+  Resolves a Group AP ID to an `%ActivityPub.Actor{}` using the bridge_users entry.
+  This is used by `Address.get_actor/1` via `Bridge.get_user_by_remote_id/1`.
+  """
+  def get_actor_from_user_record(%{data: %{"ap_data" => ap_data, "keys" => keys}}) do
+    Kazarma.ActivityPub.Actor.build_actor_from_data(ap_data, keys)
   end
 
   @doc """
