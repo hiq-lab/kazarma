@@ -7,6 +7,7 @@ defmodule Kazarma.RoomTypes.GroupTest do
 
   import Kazarma.ActivityPub.Adapter
   import Kazarma.Matrix.Transaction
+  import Kazarma.MatrixMocks
 
   alias Kazarma.Bridge
   alias MatrixAppService.Bridge.Room
@@ -116,6 +117,10 @@ defmodule Kazarma.RoomTypes.GroupTest do
     end
 
     test "it creates an AP Note from the Group actor addressed to followers and the public" do
+      # sender_ap_ids/1 calls get_actor(matrix_id:) which tries to fetch the sender profile
+      Kazarma.Matrix.TestClient
+      |> expect_get_profile_not_found("@alice:kazarma")
+
       Kazarma.ActivityPub.TestServer
       |> expect(:create, fn
         %{
