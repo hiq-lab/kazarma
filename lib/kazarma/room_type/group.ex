@@ -97,7 +97,7 @@ defmodule Kazarma.RoomType.Group do
           )
 
           {:ok, room}
-
+        else
           error ->
             Logger.error("Failed to register group room: #{inspect(error)}")
             error
