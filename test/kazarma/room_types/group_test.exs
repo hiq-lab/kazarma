@@ -252,7 +252,7 @@ defmodule Kazarma.RoomTypes.GroupTest do
         {:ok, %{}}
       end)
 
-      assert :ok == handle_activity(ap_create_note_to_group_fixture())
+      assert {:ok, _} = handle_activity(ap_create_note_to_group_fixture())
 
       assert [
                %MatrixAppService.Bridge.Event{
