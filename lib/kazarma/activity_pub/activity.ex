@@ -18,7 +18,15 @@ defmodule Kazarma.ActivityPub.Activity do
   defp room_type(%{object: %{data: %{"type" => "ChatMessage"}}}), do: :chat
 
   defp room_type(%{data: data, object: %{data: object_data}}) do
+    all_targets = List.wrap(data["to"]) ++ List.wrap(Map.get(data, "cc", []))
+
     cond do
+      # FEP-1b12: activity addressed to one of our registered Group actors
+      Enum.any?(all_targets, fn ap_id ->
+        match?(%Room{data: %{"type" => "group"}}, Bridge.get_room_by_remote_id(ap_id))
+      end) ->
+        :group
+
       # Public activities are for AP rooms
       "https://www.w3.org/ns/activitystreams#Public" in data["to"] ->
         :ap_user
@@ -44,6 +52,10 @@ defmodule Kazarma.ActivityPub.Activity do
 
   def create_from_ap(activity) do
     case room_type(activity) do
+      :group ->
+        Kazarma.Logger.log_received_activity(activity, label: "To group")
+        Kazarma.RoomType.Group.create_from_ap(activity)
+
       :ap_user ->
         Kazarma.RoomType.ApUser.create_from_ap(activity)
 

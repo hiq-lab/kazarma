@@ -143,6 +143,127 @@ defmodule Kazarma.RoomTypes.GroupTest do
     end
   end
 
+  describe "handle_activity/1 — Create{Note} from AP actor to Group is bridged to Matrix" do
+    setup :set_mox_from_context
+    setup :verify_on_exit!
+
+    setup do
+      {:ok, keys} = ActivityPub.Safety.Keys.generate_rsa_pem()
+
+      ap_data = %{
+        "preferredUsername" => "_grp_mygroup",
+        "id" => "http://kazarma/-/_grp_mygroup",
+        "type" => "Group",
+        "name" => "mygroup",
+        "followers" => "http://kazarma/-/_grp_mygroup/followers",
+        "following" => "http://kazarma/-/_grp_mygroup/following",
+        "inbox" => "http://kazarma/-/_grp_mygroup/inbox",
+        "outbox" => "http://kazarma/-/_grp_mygroup/outbox",
+        "manuallyApprovesFollowers" => false,
+        "endpoints" => %{"sharedInbox" => "http://kazarma/shared_inbox"}
+      }
+
+      {:ok, _room} =
+        Bridge.create_room(%{
+          local_id: "!myroom:kazarma",
+          remote_id: "http://kazarma/-/_grp_mygroup",
+          data: %{type: :group, handle: "mygroup", ap_data: ap_data, keys: keys}
+        })
+
+      {:ok, _user} =
+        Bridge.create_user(%{
+          local_id: "!myroom:kazarma",
+          remote_id: "http://kazarma/-/_grp_mygroup",
+          data: %{"ap_data" => ap_data, "keys" => keys}
+        })
+
+      {:ok, _alice_obj} =
+        ActivityPub.Object.do_insert(%{
+          "data" => %{
+            "type" => "Person",
+            "name" => "Alice",
+            "preferredUsername" => "alice",
+            "url" => "http://pleroma.com/pub/actors/alice",
+            "id" => "http://pleroma.com/pub/actors/alice",
+            "inbox" => "http://pleroma.com/pub/actors/alice/inbox",
+            "followers" => "http://pleroma.com/pub/actors/alice/followers",
+            "following" => "http://pleroma.com/pub/actors/alice/following",
+            "endpoints" => %{"sharedInbox" => "http://pleroma.com/shared_inbox"}
+          },
+          "local" => false,
+          "public" => true,
+          "actor" => "http://pleroma.com/pub/actors/alice"
+        })
+
+      {:ok, _} =
+        Bridge.create_user(%{
+          local_id: "@alice.pleroma.com:kazarma",
+          remote_id: "http://pleroma.com/pub/actors/alice",
+          data: %{}
+        })
+
+      :ok
+    end
+
+    def ap_create_note_to_group_fixture do
+      %{
+        data: %{
+          "type" => "Create",
+          "actor" => "http://pleroma.com/pub/actors/alice",
+          "to" => ["http://kazarma/-/_grp_mygroup"],
+          "cc" => ["https://www.w3.org/ns/activitystreams#Public"]
+        },
+        object: %ActivityPub.Object{
+          data: %{
+            "type" => "Note",
+            "id" => "http://pleroma.com/objects/note-1",
+            "actor" => "http://pleroma.com/pub/actors/alice",
+            "attributedTo" => "http://pleroma.com/pub/actors/alice",
+            "content" => "Hello Matrix from Fediverse!",
+            "source" => "Hello Matrix from Fediverse!",
+            "to" => ["http://kazarma/-/_grp_mygroup"],
+            "cc" => ["https://www.w3.org/ns/activitystreams#Public"]
+          }
+        }
+      }
+    end
+
+    test "it bridges the AP Note into the Matrix room and announces it to followers" do
+      Kazarma.Matrix.TestClient
+      |> expect(:join, fn "!myroom:kazarma", [user_id: "@alice.pleroma.com:kazarma"] -> :ok end)
+      |> expect(:send_message, fn "!myroom:kazarma",
+                                  %{
+                                    "body" => "Hello Matrix from Fediverse! \uFEFF",
+                                    "msgtype" => "m.text"
+                                  },
+                                  [user_id: "@alice.pleroma.com:kazarma"] ->
+        {:ok, "$event1:kazarma"}
+      end)
+
+      Kazarma.ActivityPub.TestServer
+      |> expect(:announce, fn %{
+                                actor: %ActivityPub.Actor{
+                                  ap_id: "http://kazarma/-/_grp_mygroup"
+                                },
+                                object: %ActivityPub.Object{
+                                  data: %{"id" => "http://pleroma.com/objects/note-1"}
+                                }
+                              } ->
+        {:ok, %{}}
+      end)
+
+      assert :ok == handle_activity(ap_create_note_to_group_fixture())
+
+      assert [
+               %MatrixAppService.Bridge.Event{
+                 local_id: "$event1:kazarma",
+                 remote_id: "http://pleroma.com/objects/note-1",
+                 room_id: "!myroom:kazarma"
+               }
+             ] = Bridge.list_events()
+    end
+  end
+
   describe "handle_activity/1 — Follow from AP actor to Group triggers Accept" do
     setup :set_mox_from_context
     setup :verify_on_exit!

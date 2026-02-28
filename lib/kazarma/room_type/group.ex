@@ -8,15 +8,54 @@ defmodule Kazarma.RoomType.Group do
   - It gets an AP `Group` actor served at `https://{domain}/-/_grp_{handle}`
   - Remote Fediverse users can follow it via WebFinger `acct:_grp_{handle}@{domain}`
   - Messages posted in the Matrix room are forwarded to AP followers as `Create{Note}` activities
+  - Posts from Fediverse actors to the Group are bridged into the Matrix room and announced to followers
 
   The Group actor stores its AP data (keys, actor JSON) in the `bridge_rooms` table
   alongside the room type metadata.
   """
   alias Kazarma.ActivityPub.Activity
   alias Kazarma.Bridge
+  alias Kazarma.Matrix.Client
   alias MatrixAppService.Bridge.Room
 
   require Logger
+
+  @doc """
+  Called when a Fediverse actor posts to the Group actor. Bridges the message into
+  the Matrix room and announces it to the group's followers (FEP-1b12 forwarding).
+  """
+  def create_from_ap(
+        %{
+          data: %{"actor" => sender_ap_id} = activity_data,
+          object: %ActivityPub.Object{data: object_data} = ap_object
+        } = _activity
+      ) do
+    all_targets = List.wrap(activity_data["to"]) ++ List.wrap(Map.get(activity_data, "cc", []))
+
+    with %Room{local_id: room_id, remote_id: group_ap_id} <- find_group_room(all_targets),
+         %ActivityPub.Actor{} = group_actor <- get_group_actor_struct(group_ap_id),
+         %{local_id: sender_matrix_id} <- Kazarma.Address.get_user(ap_id: sender_ap_id) do
+      :ok = Client.join(room_id, user_id: sender_matrix_id)
+
+      attachments = Map.get(object_data, "attachment")
+      Activity.send_message_and_attachment(sender_matrix_id, room_id, object_data, attachments)
+
+      announce_to_followers(group_actor, ap_object)
+
+      :ok
+    else
+      nil ->
+        Logger.error(
+          "Group create_from_ap: could not find group room or sender for #{inspect(all_targets)}"
+        )
+
+        :error
+
+      error ->
+        Logger.error("Group create_from_ap failed: #{inspect(error)}")
+        :error
+    end
+  end
 
   @doc """
   Called by `Kazarma.Matrix.Transaction` when a Matrix message is received in a
@@ -124,6 +163,26 @@ defmodule Kazarma.RoomType.Group do
 
       _ ->
         nil
+    end
+  end
+
+  defp find_group_room(ap_ids) do
+    Enum.find_value(ap_ids, fn ap_id ->
+      case Bridge.get_room_by_remote_id(ap_id) do
+        %Room{data: %{"type" => "group"}} = room -> room
+        _ -> nil
+      end
+    end)
+  end
+
+  defp announce_to_followers(group_actor, ap_object) do
+    case Kazarma.ActivityPub.announce(%{actor: group_actor, object: ap_object}) do
+      {:ok, _} ->
+        :ok
+
+      error ->
+        Logger.warning("Group announce_to_followers failed: #{inspect(error)}")
+        :ok
     end
   end
 
