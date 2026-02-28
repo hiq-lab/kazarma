@@ -35,7 +35,7 @@ defmodule Kazarma.RoomType.Group do
     with %Room{local_id: room_id, remote_id: group_ap_id} <- find_group_room(all_targets),
          %ActivityPub.Actor{} = group_actor <- get_group_actor_struct(group_ap_id),
          %{local_id: sender_matrix_id} <- Kazarma.Address.get_user(ap_id: sender_ap_id) do
-      :ok = Client.join(room_id, user_id: sender_matrix_id)
+      :ok = Client.join(sender_matrix_id, room_id)
 
       attachments = Map.get(object_data, "attachment")
       Activity.send_message_and_attachment(sender_matrix_id, room_id, object_data, attachments)
