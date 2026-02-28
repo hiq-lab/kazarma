@@ -30,6 +30,8 @@ config :matrix_app_service, :app_service,
 
 config :activity_pub, :domain, System.fetch_env!("ACTIVITY_PUB_DOMAIN")
 
+config :kazarma, :matrix_domain, System.get_env("MATRIX_DOMAIN", System.fetch_env!("ACTIVITY_PUB_DOMAIN"))
+
 config :kazarma, prefix_puppet_username: System.get_env("PUPPET_PREFIX", "_ap_")
 
 #######################

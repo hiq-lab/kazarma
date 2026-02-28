@@ -6,6 +6,11 @@
 
 - Invite mentioned users in Notes in AP outbox rooms
 - Invite mentioned users in Notes in direct message rooms
+- FEP-1b12 Group rooms: Matrix rooms can be exposed as ActivityPub `Group` actors.
+  Invite the Kazarma bot to a room and send `!kazarma group <handle>` to register it.
+  The group becomes discoverable on the Fediverse as `@_grp_<handle>@<domain>`.
+  Messages posted in the Matrix room are forwarded to AP followers as `Create{Note}` activities.
+  Remote Fediverse users can follow and receive updates without joining the Matrix room.
 
 ### Bug fixes
 

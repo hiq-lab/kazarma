@@ -173,6 +173,40 @@ defmodule Kazarma.ActivityPub.Actor do
     }
   end
 
+  def build_group_actor_data(handle, ap_id) do
+    localpart = "_grp_#{handle}"
+
+    %{
+      "preferredUsername" => localpart,
+      "id" => ap_id,
+      "type" => "Group",
+      "name" => handle,
+      "followers" => Routes.activity_pub_url(Endpoint, :followers, "-", localpart),
+      "following" => Routes.activity_pub_url(Endpoint, :following, "-", localpart),
+      "inbox" => Routes.activity_pub_url(Endpoint, :inbox, "-", localpart),
+      "outbox" => Routes.activity_pub_url(Endpoint, :outbox, "-", localpart),
+      "manuallyApprovesFollowers" => false,
+      endpoints: %{
+        "sharedInbox" => Routes.activity_pub_url(Endpoint, :inbox)
+      }
+    }
+  end
+
+  def get_group_actor(username) do
+    localpart = username |> String.split("@") |> hd()
+
+    ap_id =
+      KazarmaWeb.Router.Helpers.activity_pub_url(KazarmaWeb.Endpoint, :actor, "-", localpart)
+
+    case Kazarma.Bridge.get_room_by_remote_id(ap_id) do
+      %MatrixAppService.Bridge.Room{data: %{"ap_data" => ap_data, "keys" => keys}} ->
+        {:ok, build_actor_from_data(ap_data, keys)}
+
+      _ ->
+        nil
+    end
+  end
+
   def set_displayname(actor, displayname) do
     %{actor | data: put_in(actor.data, ["name"], displayname)}
   end
@@ -204,6 +238,9 @@ defmodule Kazarma.ActivityPub.Actor do
 
       username == Address.application_username() ->
         get_application_actor()
+
+      String.starts_with?(username, "_grp_") ->
+        get_group_actor(username)
 
       true ->
         get_puppet_actor(username)
